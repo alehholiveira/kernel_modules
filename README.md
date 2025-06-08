@@ -212,10 +212,10 @@ Este projeto foi desenvolvido com foco eficaz em equipe, visando alcançar um ob
 
 Os integrantes são: 
 
-[Alexandre Augusto Tescaro Oliveira] - [Link para o GitHub do Integrante 1](https://github.com/alehholiveira)
-[Augusto Guaschi Morato] - [Link para o GitHub do Integrante 2](https://github.com/Guto06)
-[Felipe Dias Konda] - [Link para o GitHub do Integrante 3](https://github.com/FelipeDiasKonda)
-[Hugo Tahara Menegatti] - [Link para o GitHub do Integrante 4](https://github.com/taharaLovelace)
-[Matheus Gonçalves Anitelli] - [Link para o GitHub do Integrante 4](https://github.com/mttue7)
-[Vinícius Barbosa de Souza] - [Link para o GitHub do Integrante 4](https://github.com/ViniBSouza)
-[Vinicius Henrique Galassi] - [Link para o GitHub do Integrante 4](https://github.com/Vgalassi)
+- [Alexandre Augusto Tescaro Oliveira](https://github.com/alehholiveira)
+- [Augusto Guaschi Morato](https://github.com/Guto06)
+- [Felipe Dias Konda](https://github.com/FelipeDiasKonda)
+- [Hugo Tahara Menegatti](https://github.com/taharaLovelace)
+- [Matheus Gonçalves Anitelli](https://github.com/mttue7)
+- [Vinícius Barbosa de Souza](https://github.com/ViniBSouza)
+- [Vinicius Henrique Galassi](https://github.com/Vgalassi)
