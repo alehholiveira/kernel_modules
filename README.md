@@ -55,24 +55,29 @@ Para usar o `kfetch_mod`, siga estes passos:
     ```bash
     make # Compila kfetch_mod.ko e o programa de usuário kfetch.c
     ```
-3.  **Carregue o módulo** no kernel:
+3.  **Compile o programa de nivel de usuário** utilizando o seguinte comando:
+    ```bash
+    gcc -o kfetch kfetch.o # Compila o programa
+    ```
+
+4.  **Carregue o módulo** no kernel:
     ```bash
     sudo insmod kfetch_mod.ko
     ```
-4.  **Para ler informações** do sistema (todas as informações por padrão, ou as definidas pela máscara):
+5.  **Para ler informações** do sistema (todas as informações por padrão, ou as definidas pela máscara):
     ```bash
     sudo ./kfetch # Executa o programa user-space para ler do /dev/kfetch
     ```
-5.  **Para escrever uma máscara** de informação (ex: exibir CPU Model e Memory), passando o número da máscara como argumento. Será necessário um programa em C no espaço do usuário para escrever no `/dev/kfetch`. Por exemplo, para `KFETCH_CPU_MODEL | KFETCH_MEM` (que é `(1 << 2) | (1 << 3)` = `4 | 8` = `12`):
+6.  **Para escrever uma máscara** de informação (ex: exibir CPU Model e Memory), passando o número da máscara como argumento. Será necessário um programa em C no espaço do usuário para escrever no `/dev/kfetch`. Por exemplo, para `KFETCH_CPU_MODEL | KFETCH_MEM` (que é `(1 << 2) | (1 << 3)` = `4 | 8` = `12`):
     ```bash
     sudo ./kfetch "12" # Escreve o número 12 como máscara para o /dev/kfetch
     ```
     *Obs: O programa `kfetch.c` deve ser capaz de receber um argumento e escrevê-lo para o dispositivo `/dev/kfetch`.*
-6.  **Descarregar o Módulo:**
+7.  **Descarregar o Módulo:**
     ```bash
     sudo rmmod kfetch_mod
     ```
-7.  **Limpar arquivos gerados:**
+8.  **Limpar arquivos gerados:**
     ```bash
     make clean
     ```
