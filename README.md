@@ -53,11 +53,11 @@ Para usar o `kfetch_mod`, siga estes passos:
 1.  **Navegue** até o diretório do módulo `kfetch_mod` (`kfetch_mod_dir/`).
 2.  **Compile o módulo do kernel** e o programa de usuário (`kfetch`):
     ```bash
-    make # Compila kfetch_mod.ko e o programa de usuário kfetch.c
+    make 
     ```
 3.  **Compile o programa de nivel de usuário** utilizando o seguinte comando:
     ```bash
-    gcc -o kfetch kfetch.o # Compila o programa
+    gcc -o kfetch kfetch.c
     ```
 
 4.  **Carregue o módulo** no kernel:
@@ -66,7 +66,7 @@ Para usar o `kfetch_mod`, siga estes passos:
     ```
 5.  **Para ler informações** do sistema (todas as informações por padrão, ou as definidas pela máscara):
     ```bash
-    sudo ./kfetch # Executa o programa user-space para ler do /dev/kfetch
+    sudo ./kfetch 
     ```
 6.  **Para escrever uma máscara** de informação (ex: exibir CPU Model e Memory), passando o número da máscara como argumento. Será necessário um programa em C no espaço do usuário para escrever no `/dev/kfetch`. Por exemplo, para `KFETCH_CPU_MODEL | KFETCH_MEM` (que é `(1 << 2) | (1 << 3)` = `4 | 8` = `12`):
     ```bash
@@ -133,8 +133,8 @@ Para usar o módulo de monitoramento de processos, siga estes passos:
     ```
 5.  **Visualize a pontuação de risco** de um processo específico ou do resumo geral (dependendo de como você implementou a exposição dos dados no `/proc`):
     ```bash
-    cat /proc/process_risk/<PID_DO_PROCESSO> # Para um PID específico (se implementado)
-    cat /proc/process_risk                 # Ou para um resumo geral, se houver um único arquivo
+    cat /proc/process_risk/<PID_DO_PROCESSO>
+    cat /proc/process_risk                 
     ```
     A saída será similar a:
     ```
@@ -174,11 +174,11 @@ sudo apt install build-essential linux-headers-$(uname -r)
    1. Clone esse repositório ou navegue até o diretório do projeto
    2. Para cada módulo, navegue até seu respectivo diretório e execute make. Exemplo:
    ```bash
-   cd kfetch_mod_dir/ # Navegue para o diretório do módulo kfetch_mod
-   make               # Compila kfetch_mod.ko e, se houver, o programa de usuário kfetch
+   cd kfetch_mod_dir/
+   make            
 
-   cd ../process_behavior_mod_dir/ # Navegue para o diretório do módulo process_behavior_mod
-   make                            # Compila process_risk.ko
+   cd ../process_behavior_mod_dir/ 
+   make                          
    ```
    Isso gerará os arquivos .ko (Kernel Object) e os executáveis de espaço de usuário (se aplicável).
 
@@ -186,8 +186,8 @@ sudo apt install build-essential linux-headers-$(uname -r)
 Após a compilação bem-sucedida, você pode carregar o módulo no kernel usando insmod. Lembre-se de que isso requer privilégios de root.
 
 ```bash
-sudo insmod kfetch_mod.ko         # Para o módulo kfetch_mod
-sudo insmod process_risk.ko # Para o módulo process_behavior_mod (nome do arquivo .ko)
+sudo insmod kfetch_mod.ko       
+sudo insmod process_risk.ko 
 ```
 Você pode verificar se o módulo foi carregado usando lsmod:
 ```bash
@@ -198,8 +198,8 @@ lsmod | grep process_risk
 ### 4. Descarregamento do Módulo
 Para remover o módulo do kernel, use rmmod.
 ```bash
-sudo rmmod kfetch_mod         # Para o módulo kfetch_mod
-sudo rmmod process_risk.ko # Para o módulo process_behavior_mod
+sudo rmmod kfetch_mod       
+sudo rmmod process_risk.ko 
 ```
 
 ### 5. Limpeza
