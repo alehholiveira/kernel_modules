@@ -28,7 +28,13 @@
 #include <linux/sched.h>
 #include <linux/mutex.h>
 
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Alexandre A., Augusto M., Felipe K., Hugo T., Matheus A., Vinicius B., Vinicius G.");
+MODULE_DESCRIPTION("Módulo que cria um dispositivo de caractere que mostra as informações do sistema, como nome do host,
+    versão do kernel, modelo da CPU, núcleosonline e total da CPU, memória livre e total, número do processos e uptime");
+
 static DEFINE_MUTEX(info_mutex);
+
 
 //Definindo máscara 
 #define KFETCH_NUM_INFO 6
@@ -74,7 +80,7 @@ static char msg[BUF_LEN + 1];
 static struct class *cls; 
 
 //Operacoes do dispositivo
-static struct file_operations chardev_fops = { 
+static struct file_operations kfetch_fops = { 
     .read = device_read, 
     .write = device_write, 
     .open = device_open, 
@@ -82,18 +88,21 @@ static struct file_operations chardev_fops = {
 }; 
  
 
-//Executado quando o modulo for instalado
-static int __init chardev_init(void) 
+/*
+Função chamada na inserção do módulo. Responsável por registrar o dispositivo de caractere e criar o dispositivo em /dev.
+
+*/
+static int __init kfetch_init(void) 
 { 
     //Criando dispositivo
-    major = register_chrdev(0, DEVICE_NAME, &chardev_fops); 
+    major = register_chrdev(0, DEVICE_NAME, &kfetch_fops); 
     if (major < 0) { 
         pr_alert("Registering char device failed with %d\n", major); 
         return major; 
     } 
  
     pr_info("I was assigned major number %d.\n", major); 
- 
+    //Criando classe de acordo com a versão do linux (as versões anterior a 6.4.0 apresentam dois parâmetros)
     #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0) 
         cls = class_create(DEVICE_NAME); 
     #else 
@@ -105,11 +114,13 @@ static int __init chardev_init(void)
     
         return 0; 
 } 
-//Executado quando modulo vai embora
-static void __exit chardev_exit(void) 
+/*
+Função chamada na remoção do módulo. Realiza a limpeza dos recursos alocados, destruindo o dispositivo e removendo o driver do kernel.
+*/
+static void __exit kfetch_exit(void) 
 { 
     
-    //MATA o device que o modulo criou
+    //Destroi o dispositivo que o modulo criou
     device_destroy(cls, MKDEV(major, 0)); 
     class_destroy(cls); 
  
@@ -118,10 +129,18 @@ static void __exit chardev_exit(void)
 } 
  
 
- //Executado quando um processo abre o dispositivo
+/*
+Executada ao abrir o dispositivo. Coleta dinamicamente as informações do sistema, de acordo com a máscara atual, e as armazena na variável msg. Também aplica um bloqueio com mutex para garantir consistência e evita acessos simultâneos com atomic_t already_open.
+*/
 static int device_open(struct inode *inode, struct file *file) 
 { 
-    //Linha bacana depois do nome do host
+    //Verifica se arquivo já está sendo usado
+    if (atomic_cmpxchg(&already_open, CDEV_NOT_USED, CDEV_EXCLUSIVE_OPEN) != CDEV_NOT_USED) {
+        pr_alert("Device already in use\n");
+        return -EBUSY; 
+    }
+
+    //Linha depois do nome do host
     char *line;
 
     int j = 0;
@@ -133,8 +152,7 @@ static int device_open(struct inode *inode, struct file *file)
         j++;
     }
 
-    struct sysinfo i;
-    si_meminfo(&i);
+    
     //Variaveis para as informacoes do dispositivo
     char release[64] = "";
     char cpu_model[64] = "";
@@ -211,26 +229,30 @@ static int device_open(struct inode *inode, struct file *file)
     return 0; 
 } 
  
-//Executado quando acabam de usar o dispostivo
+/* 
+Executada quando o dispositivo é fechado. Libera o controle exclusivo do dispositivo e decrementa o contador de uso do módulo.
+*/
 static int device_release(struct inode *inode, struct file *file) 
 { 
     //Libera o dispositvo pro proximo usar
     atomic_set(&already_open, CDEV_NOT_USED); 
  
-    //Decrementando o contador de uso (NAO TIRAR ESSA LINHA)
+    //Decrementando o contador de uso
     module_put(THIS_MODULE); 
  
     return 0; 
 } 
  
 
-//Executado quando é realizado a leitura no dispositivo
+/*
+Executada ao ler o dispositivo. Copia o conteúdo da variável msg (preenchida em device_open) para o espaço do usuário usando put_user.
+*/
 static ssize_t device_read(struct file *filp, 
                            char __user *buffer, 
                            size_t length,  
                            loff_t *offset) 
 { 
-    /* Number of bytes actually written to the buffer */ 
+
     int bytes_read = 0; 
     const char *msg_ptr = msg; 
  
@@ -255,24 +277,27 @@ static ssize_t device_read(struct file *filp,
     return bytes_read; 
 } 
  
-//Executado quando é ocorrer escrita no dispositivo
+/*
+device_write: Executada ao escrever no dispositivo. Lê uma string do usuário contendo um número inteiro (representando a nova máscara de bits),
+converte-a e atualiza a variável info_mask, que define quais informações serão exibidas nas próximas leituras. Toda a operação é protegida por mutex para garantir exclusividade durante a atualização.
+*/
 static ssize_t device_write(struct file *filp, const char __user *buff, 
                             size_t len, loff_t *off) 
 { 
     char kbuf[16];
     int mask_info;
-    //Verificando se a mensagem nao e enorme
+    //Verificando tamanho esta correto
     if (len >= sizeof(kbuf)) {
         pr_alert("Too long input\n");
         return -EINVAL;
     }
 
-    //Copiando informacoes do escritas para kbuf
+    //Copiando informacoes de escritas para kbuf e verificando se der algum erro
     if (copy_from_user(kbuf, buff, len))
         return -EFAULT;
 
     kbuf[len] = '\0'; 
-    //Convertendo 
+    //Verificando se é possível converter para inteiro
     if (kstrtoint(kbuf, 10, &mask_info) < 0) {
         pr_alert("Error, couldn't covert to int\n");
         return -EINVAL;
@@ -285,7 +310,6 @@ static ssize_t device_write(struct file *filp, const char __user *buff,
     return len;
 } 
  
-module_init(chardev_init); 
-module_exit(chardev_exit); 
+module_init(kfetch_init); 
+module_exit(kfetch_exit); 
  
-MODULE_LICENSE("GPL");
