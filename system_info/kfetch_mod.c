@@ -30,8 +30,8 @@
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Alexandre A., Augusto M., Felipe K., Hugo T., Matheus A., Vinicius B., Vinicius G.");
-MODULE_DESCRIPTION("Módulo que cria um dispositivo de caractere que mostra as informações do sistema, como nome do host,
-    versão do kernel, modelo da CPU, núcleosonline e total da CPU, memória livre e total, número do processos e uptime");
+MODULE_DESCRIPTION("Módulo que cria um dispositivo de caractere que mostra as informações do sistema, como nome do host,versão do kernel, modelo da CPU, núcleosonline e total da CPU, memória livre e total, número do processos e uptime");
+    
 
 static DEFINE_MUTEX(info_mutex);
 
