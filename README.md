@@ -10,6 +10,12 @@ Este projeto visa aprofundar o conhecimento em programação de nível de sistem
 
 ---
 
+### Pré-requisitos
+- Kernel Linux com headers de desenvolvimento (ex: `linux-headers-$(uname -r)`)
+- GCC
+
+---
+
 ## Módulos Implementados
 
 O projeto consiste em dois módulos principais:
@@ -50,7 +56,7 @@ Um driver de dispositivo de caractere que cria o dispositivo `/dev/kfetch`. Este
 
 Para usar o `kfetch_mod`, siga estes passos:
 
-1.  **Navegue** até o diretório do módulo `kfetch_mod` (`kfetch_mod_dir/`).
+1.  **Navegue** até o diretório do módulo `kfetch_mod` (`system_info/`).
 2.  **Compile o módulo do kernel** e o programa de usuário (`kfetch`):
     ```bash
     make 
@@ -87,38 +93,48 @@ Para usar o `kfetch_mod`, siga estes passos:
 
 ### 2. Módulo 2: Sistema de Pontuação de Comportamento de Processos
 
-Este módulo monitora continuamente métricas chave para cada processo em execução no sistema, como uso da CPU, chamadas de sistema e atividade de E/S. Com base nessas métricas, ele atribui uma **nota de risco** (Baixo, Médio ou Alto) a cada processo.
+Este módulo de kernel Linux monitora processos em execução e atribui uma nota de risco (Baixo, Médio, Alto) com base no consumo de recursos e comportamento.
 
-#### **Algoritmo de Avaliação de Risco (Proposta)**
+## Métricas Monitoradas
 
-O algoritmo de avaliação de risco é baseado em uma combinação de limiares e padrões de comportamento:
+O módulo coleta e analisa estas métricas a cada 5 segundos:
 
-* **Uso da CPU:**
-    * `Baixo`: < 10% de uso médio nos últimos 5 segundos.
-    * `Médio`: 10% - 50% de uso médio nos últimos 5 segundos.
-    * `Alto`: > 50% de uso médio nos últimos 5 segundos.
-* **Chamadas de Sistema (syscalls):**
-    * `Baixo`: < 100 syscalls/segundo.
-    * `Médio`: 100 - 500 syscalls/segundo.
-    * `Alto`: > 500 syscalls/segundo (pode indicar atividade incomum ou maliciosa).
-* **Atividade de E/S (leitura/escrita de blocos):**
-    * `Baixo`: < 100 blocos/segundo.
-    * `Médio`: 100 - 1000 blocos/segundo.
-    * `Alto`: > 1000 blocos/segundo (pode indicar acesso excessivo a disco, como ransomware ou mineradores).
-* **Critério Combinado:**
-    * Se qualquer métrica individual atingir `Alto`, a nota de risco geral é `Alto`.
-    * Se duas ou mais métricas individuais atingirem `Médio`, a nota de risco geral é `Médio`.
-    * Caso contrário, a nota de risco é `Baixo`.
+| Métrica               | Descrição                                                                 | Unidade  |
+|-----------------------|---------------------------------------------------------------------------|----------|
+| Uso de CPU            | Tempo de CPU consumido no último intervalo                                | ms       |
+| Chamada de Sistema    | Falhas de página (minor + major) como proxy para atividade do sistema     | contagem |
+| E/S                   | Bytes lidos/escritos no último intervalo                                  | KB       |
+| Memória RSS           | Memória física residente atual                                            | MB       |
+
+## Algoritmo de Avaliação de Risco
+
+Cada métrica contribui para uma pontuação conforme os limiares:
+
+| Métrica               | Limiar Médio         | Limiar Alto          |
+|-----------------------|----------------------|----------------------|
+| Uso de CPU (ms)       | > 200 ms             | > 800 ms             | 
+| Chamada de Sistema    | > 500                | > 3000               |
+| E/S (KB)              | > 500 KB             | > 2000 KB            |
+| Memória RSS (MB)      | > 350 MB             | > 600 MB             |
+
+### Cálculo da Pontuação:
+- **Acima do limiar médio**: +1 ponto por métrica
+- **Acima do limiar alto**: +2 pontos por métrica
+
+### Classificação de Risco:
+- **Baixo**: 0 pontos
+- **Médio**: 1-3 pontos
+- **Alto**: ≥4 pontos
 
 #### **Saída dos Resultados:**
 
-Os resultados da avaliação de risco, incluindo a nota atribuída e as métricas relevantes, são exportados para o sistema de arquivos `/proc`. Cada processo terá um arquivo específico dentro de `/proc/<pid>/`, como `/proc/<pid>/behavior_score`, permitindo fácil visualização com ferramentas padrão como `cat`.
+Os resultados da avaliação de risco, incluindo a nota atribuída e as métricas relevantes, são exportados para o sistema de arquivos `/proc`. Cada processo terá um arquivo específico dentro de `/proc/process_risk/<pid>`, permitindo fácil visualização com ferramentas padrão como `cat`.
 
 #### **Como Usar**
 
 Para usar o módulo de monitoramento de processos, siga estes passos:
 
-1.  **Navegue** até o diretório do módulo `process_behavior_mod` (`process_behavior_mod_dir/`).
+1.  **Navegue** até o diretório do módulo `process_monitor`(`process/`).
 2.  **Compile o módulo do kernel**:
     ```bash
     make
@@ -131,19 +147,20 @@ Para usar o módulo de monitoramento de processos, siga estes passos:
     ```bash
     ls /proc/process_risk/
     ```
-5.  **Visualize a pontuação de risco** de um processo específico ou do resumo geral (dependendo de como você implementou a exposição dos dados no `/proc`):
+5.  **Visualize a pontuação de risco** de um processo específico:
     ```bash
-    cat /proc/process_risk/<PID_DO_PROCESSO>
-    cat /proc/process_risk                 
+    cat /proc/process_risk/<pid>
+    while true; do cat /proc/process_risk/<pid>; sleep 5; done               
     ```
     A saída será similar a:
     ```
-    PID: 1234
-    Nome: minha_aplicacao
-    CPU: 15% (Médio)
-    Syscalls: 250/s (Médio)
-    I/O: 500 blocks/s (Médio)
-    Nota de Risco: Médio
+    PID: <pid>
+    Nome: <processo>
+    Uso de CPU (delta ms/5s): 20
+    Chamadas de Sistema (delta aprox/5s): 39
+    E/S Total (delta KB/5s): 0
+    Memória (MB): 397
+    Risco: Médio
     ```
 6.  **Descarregar o Módulo:**
     ```bash
@@ -155,62 +172,6 @@ Para usar o módulo de monitoramento de processos, siga estes passos:
     ```
 
 ---
-
-## Instruções de Compilação e Carregamento
-
-Para compilar e carregar os módulos em um sistema Ubuntu Linux, siga as instruções abaixo:
-
-### 1. Pré-requisitos
-
-Certifique-se de ter os **cabeçalhos do kernel** instalados. Você pode instalá-los com o seguinte comando:
-
-```bash
-sudo apt update
-sudo apt install build-essential linux-headers-$(uname -r)
-```
-
-### 2. Compilação
-
-   1. Clone esse repositório ou navegue até o diretório do projeto
-   2. Para cada módulo, navegue até seu respectivo diretório e execute make. Exemplo:
-   ```bash
-   cd kfetch_mod_dir/
-   make            
-
-   cd ../process_behavior_mod_dir/ 
-   make                          
-   ```
-   Isso gerará os arquivos .ko (Kernel Object) e os executáveis de espaço de usuário (se aplicável).
-
-### 3. Carregamento do Módulo
-Após a compilação bem-sucedida, você pode carregar o módulo no kernel usando insmod. Lembre-se de que isso requer privilégios de root.
-
-```bash
-sudo insmod kfetch_mod.ko       
-sudo insmod process_risk.ko 
-```
-Você pode verificar se o módulo foi carregado usando lsmod:
-```bash
-lsmod | grep kfetch_mod
-lsmod | grep process_risk
-```
-
-### 4. Descarregamento do Módulo
-Para remover o módulo do kernel, use rmmod.
-```bash
-sudo rmmod kfetch_mod       
-sudo rmmod process_risk.ko 
-```
-
-### 5. Limpeza
-Para remover os arquivos gerados pela compilação (dentro de cada diretório de módulo):
-```bash
-cd kfetch_mod_dir/
-make clean
-
-cd ../process_behavior_mod_dir/
-make clean
-```
 
 ## Integrantes
 Este projeto foi desenvolvido com foco eficaz em equipe, visando alcançar um objetivo complexo de desenvolvimento de software de nível de sistema.
