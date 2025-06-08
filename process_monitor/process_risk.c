@@ -17,12 +17,13 @@ MODULE_AUTHOR("Alexandre A., Augusto M., Felipe K., Hugo T., Matheus A., Viniciu
 MODULE_DESCRIPTION("Módulo que monitora continuamente processos e avalia risco");
 
 #define PROC_DIRNAME "process_risk"
-#define MONITOR_INTERVAL_JIFFIES (5 * HZ)
+#define MONITOR_INTERVAL_JIFFIES (5 * HZ) // intervalo de monitoramento (5 segundos)
 
 struct process_risk_info {
-    pid_t pid;
-    char comm[TASK_COMM_LEN];
+    pid_t pid;      
+    char comm[TASK_COMM_LEN];            // nome do processo
 
+    // métricas cumulativas brutas do kernel (ex: tempo de CPU em nano segundos)
     u64 current_utime_ns;
     u64 current_stime_ns;
     u64 current_read_bytes;
@@ -30,6 +31,7 @@ struct process_risk_info {
     unsigned long current_min_flt;
     unsigned long current_maj_flt;
 
+    // métricas cumulativas da leitura anterior (para cálculo de deltas)
     u64 prev_utime_ns;
     u64 prev_stime_ns;
     u64 prev_read_bytes;
@@ -37,20 +39,25 @@ struct process_risk_info {
     unsigned long prev_min_flt;
     unsigned long prev_maj_flt;
 
-    unsigned long cpu_delta_ms;
-    unsigned long syscalls_delta;
-    unsigned long io_delta_kb;
-    unsigned long mem_rss_mb;
+    // métricas calculadas como deltas (uso no último intervalo de 5s)
+    unsigned long cpu_delta_ms;         // uso de CPU em millissegundos
+    unsigned long syscalls_delta;       // estimativa de chamadadas de sistema com base em page/faults
+                                        // (não é uma contagem exata, mas uma aproximação)
+    unsigned long io_delta_kb;          // E/S total em KB no intervalo
+    unsigned long mem_rss_mb;           // memória fisica RSS em MB (é um valor instantâneo, não um delta)
 
-    char risk_level[10];
-    struct list_head list; 
+    char risk_level[10];                // variável para armazenar o nível de risco do processo
+                                        // "Baixo", "Médio" ou "Alto"
+    struct list_head list;              // nó para a lista encadeada do kernel
 };
 
+// variáveis globais para o diretório /proc, timer, lista de processos e mutex
 static struct proc_dir_entry *parent_dir;
 static struct timer_list monitor_timer;
 static LIST_HEAD(process_info_list); 
 static DEFINE_MUTEX(process_info_mutex);
 
+// definições dos limiares para a avaliação de risco (valores para deltas e RSS)
 #define CPU_DELTA_MEDIUM_THRESHOLD_MS  200
 #define CPU_DELTA_HIGH_THRESHOLD_MS    800
 
@@ -63,12 +70,14 @@ static DEFINE_MUTEX(process_info_mutex);
 #define MEM_RSS_MEDIUM_THRESHOLD_MB  350
 #define MEM_RSS_HIGH_THRESHOLD_MB    600
 
-#define TOTAL_SCORE_MEDIUM_RISK 1
-#define TOTAL_SCORE_HIGH_RISK   4
+#define TOTAL_SCORE_MEDIUM_RISK 1  // pontuação mínima para risco médio
+#define TOTAL_SCORE_HIGH_RISK   4  // pontuação mínima para risco alto
 
 static void evaluate_and_set_risk(struct process_risk_info *info) {
     int score = 0;
 
+    // pontua o risco com base nas métricas delta de CPU, chamadas de sistema e E/S
+    // e no valor absoluto de memória RSS.
     if (info->cpu_delta_ms > CPU_DELTA_HIGH_THRESHOLD_MS) {
         score += 2; // Alta pontuação
     } else if (info->cpu_delta_ms > CPU_DELTA_MEDIUM_THRESHOLD_MS) {
@@ -93,6 +102,7 @@ static void evaluate_and_set_risk(struct process_risk_info *info) {
         score += 1;
     }
 
+    // define o nível de risco com base na pontuação total
     if (score >= TOTAL_SCORE_HIGH_RISK) {
         strncpy(info->risk_level, "Alto", sizeof(info->risk_level) - 1);
     } else if (score >= TOTAL_SCORE_MEDIUM_RISK) {
@@ -103,15 +113,17 @@ static void evaluate_and_set_risk(struct process_risk_info *info) {
     info->risk_level[sizeof(info->risk_level) - 1] = '\0';
 }
 
+// função de callback para leitura do arquivo /proc/process_risk/<pid>
 static int proc_pid_show(struct seq_file *m, void *v) {
     struct process_risk_info *info = (struct process_risk_info *)m->private;
 
     if (!info) {
-        return -ESRCH;
+        return -ESRCH;  // garantindo que a informação nao é invalida
     }
 
-    mutex_lock(&process_info_mutex);
+    mutex_lock(&process_info_mutex);    // bloqueia o mutex para acesso seguro à estrutura de dados
 
+    // exibe as informações do processo e o risco atribuido formatadas no arquivo em /proc/process_risk/<pid>
     seq_printf(m,
         "PID: %d\n"
         "Nome: %s\n"
@@ -129,16 +141,18 @@ static int proc_pid_show(struct seq_file *m, void *v) {
         info->risk_level
     );
 
-    mutex_unlock(&process_info_mutex);
+    mutex_unlock(&process_info_mutex);  // libera o mutex após a leitura
 
     return 0;
 }
 
+// função de abertura para o arquivo /proc/process_risk/<pid>
 static int proc_pid_open(struct inode *inode, struct file *file) {
     struct process_risk_info *info = pde_data(inode);
     return single_open(file, proc_pid_show, info);
 }
 
+// definição das operações do arquivo para as entradas /proc/process_risk/<pid>
 static const struct proc_ops pid_file_ops = {
     .proc_open    = proc_pid_open,
     .proc_read    = seq_read,
@@ -146,17 +160,18 @@ static const struct proc_ops pid_file_ops = {
     .proc_release = single_release,
 };
 
-
+// função de callback do timer: executa periodicamente para monitorar e atualizar processos
 static void monitor_processes_callback(struct timer_list *t) {
     struct task_struct *task;
     struct process_risk_info *info, *temp;
     LIST_HEAD(existing_process_list_snapshot);
 
-    mutex_lock(&process_info_mutex);
+    mutex_lock(&process_info_mutex); // novamente um mutex para modifiar a lista principal de processos existentes
 
     list_splice_init(&process_info_list, &existing_process_list_snapshot);
 
-    rcu_read_lock();
+    rcu_read_lock(); // bloqueia a leitura RCU para garantir que a lista de processos não seja modificada enquanto iteramos
+    // percorre todos os processos do sistema para iterar para calculo de deltas
     for_each_process(task) {
         bool found = false;
         list_for_each_entry_safe(info, temp, &existing_process_list_snapshot, list) {
@@ -189,7 +204,8 @@ static void monitor_processes_callback(struct timer_list *t) {
                                        (info->prev_min_flt + info->prev_maj_flt);
                 info->io_delta_kb = ((info->current_read_bytes + info->current_write_bytes) -
                                      (info->prev_read_bytes + info->prev_write_bytes)) >> 10;
-
+                
+                // coleta o valor da memoria RSS em MB (valor instantâneo)
                 info->mem_rss_mb = 0;
                 if (task->mm) {
                     info->mem_rss_mb = (get_mm_rss(task->mm) * PAGE_SIZE) >> 20;
@@ -202,6 +218,7 @@ static void monitor_processes_callback(struct timer_list *t) {
             }
         }
 
+        // se o processo não foi encontrado na lista, cria o mesmo e coleta as informações
         if (!found) {
             struct process_risk_info *new_info = kmalloc(sizeof(*new_info), GFP_ATOMIC);
             if (new_info) {
@@ -248,8 +265,9 @@ static void monitor_processes_callback(struct timer_list *t) {
             }
         }
     }
-    rcu_read_unlock();
+    rcu_read_unlock();  // libera a leitura RCU após iterar por todos os processos
 
+    // remove os processos que não estão mais ativos e libera a memória
     list_for_each_entry_safe(info, temp, &existing_process_list_snapshot, list) {
         pr_info("Processo %d (%s) terminado. Removendo entrada /proc.\n", info->pid, info->comm);
         char filename[16];
@@ -259,12 +277,12 @@ static void monitor_processes_callback(struct timer_list *t) {
         kfree(info);
     }
 
-    mutex_unlock(&process_info_mutex);
+    mutex_unlock(&process_info_mutex); // libera o mutex 
 
-    mod_timer(&monitor_timer, jiffies + MONITOR_INTERVAL_JIFFIES);
+    mod_timer(&monitor_timer, jiffies + MONITOR_INTERVAL_JIFFIES); // reinicia o timer para o próximo monitoramento
 }
 
-
+// função de inicialização do módulo: cria o diretório /proc/process_risk e inicia o timer
 static int __init process_risk_init(void) {
     pr_info("Iniciando módulo process_risk_monitor...\n");
 
@@ -281,6 +299,9 @@ static int __init process_risk_init(void) {
     return 0;
 }
 
+// função de limpeza do módulo: remove o diretório /proc/process_risk e libera a memória
+// além de parar o timer e remover as entradas de processos monitorados
+// e liberar a memória alocada para cada entrada de processo
 static void __exit process_risk_exit(void) {
     struct process_risk_info *info, *temp;
 
