@@ -18,8 +18,6 @@ Este projeto visa aprofundar o conhecimento em programação de nível de sistem
 
 ## Módulos Implementados
 
-O projeto consiste em dois módulos principais:
-
 ### 1. Módulo 1: `kfetch_mod` (Informações do Sistema)
 
 Um driver de dispositivo de caractere que cria o dispositivo `/dev/kfetch`. Este módulo permite que programas do espaço do usuário recuperem informações detalhadas do sistema ao ler deste dispositivo.
@@ -76,7 +74,7 @@ Para usar o `kfetch_mod`, siga estes passos:
     ```
 6.  **Para escrever uma máscara** de informação (ex: exibir CPU Model e Memory), passando o número da máscara como argumento. Será necessário um programa em C no espaço do usuário para escrever no `/dev/kfetch`. Por exemplo, para `KFETCH_CPU_MODEL | KFETCH_MEM` (que é `(1 << 2) | (1 << 3)` = `4 | 8` = `12`):
     ```bash
-    sudo ./kfetch "12" # Escreve o número 12 como máscara para o /dev/kfetch
+    sudo ./kfetch "12"
     ```
     *Obs: O programa `kfetch.c` deve ser capaz de receber um argumento e escrevê-lo para o dispositivo `/dev/kfetch`.*
 7.  **Descarregar o Módulo:**
