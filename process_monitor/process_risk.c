@@ -119,7 +119,7 @@ static int proc_pid_show(struct seq_file *m, void *v) {
         "Chamadas de Sistema (delta aprox/5s): %lu\n"
         "E/S Total (delta KB/5s): %lu\n"
         "Memória (MB): %lu\n"
-        "Risco: %s\n",
+        "Risco: %s\n----------------------------------------------------------------\n",
         info->pid,
         info->comm,
         info->cpu_delta_ms,
